@@ -415,3 +415,25 @@ déjà été réalisées et documentées ci-dessus aux points 6 à 17.)
     ou non la ligne dans le CSV (le polling lui-même ne s'arrête
     jamais tant que l'écran reste connecté).
     Testé et confirmé fonctionnel sur l'appareil réel.
+
+13. **Ajout d'un graphique de puissance sur la session**
+    (`lib/screens/logger_screen.dart`), à la demande de l'utilisateur.
+    Dépendance ajoutée : `fl_chart` (via `flutter pub add fl_chart`,
+    résolu en version 1.2.0 — package pur Dart/Flutter, pas de code
+    natif, choisi plutôt qu'un `CustomPainter` maison pour la rapidité
+    d'implémentation et le rendu (grille, axes) prêts à l'emploi).
+    Implémentation :
+    - `_secondsElapsed` (compteur incrémenté à chaque tick du
+      `Timer.periodic` existant, même en cas de non-réponse) et
+      `_wattsSpots` (liste de `FlSpot(secondes, watts)`) réinitialisés
+      à chaque nouvelle connexion dans `_startPolling()`, alimentés
+      dans son callback.
+    - Nouveau widget `_PowerChart` (courbe simple, pas de points,
+      échelle Y de 0 à ~110% du max observé) affiché sous la carte de
+      mesures, sur toute la durée de la session (pas de fenêtre
+      glissante, conformément à la demande).
+    - `body` de `LoggerScreen` passé de `Padding` à
+      `SingleChildScrollView` par précaution, le contenu ajouté
+      (titre + graphique de 180px) pouvant dépasser la hauteur d'un
+      petit écran.
+    Testé et confirmé fonctionnel sur l'appareil réel.

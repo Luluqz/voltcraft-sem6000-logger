@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:share_plus/share_plus.dart';
@@ -26,6 +27,8 @@ class _LoggerScreenState extends State<LoggerScreen> {
   String _status = 'Déconnecté';
   bool _connected = false;
   bool _logging = false;
+  int _secondsElapsed = 0;
+  final List<FlSpot> _wattsSpots = [];
 
   @override
   void initState() {
@@ -59,10 +62,16 @@ class _LoggerScreenState extends State<LoggerScreen> {
 
   void _startPolling() {
     _pollTimer?.cancel();
+    _secondsElapsed = 0;
+    _wattsSpots.clear();
     _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       final m = await _ble.readOnce();
+      _secondsElapsed++;
       if (m == null) return;
-      setState(() => _last = m);
+      setState(() {
+        _last = m;
+        _wattsSpots.add(FlSpot(_secondsElapsed.toDouble(), m.watts));
+      });
       if (_logging) {
         await _csvLogger?.appendRow(m);
       }
@@ -89,7 +98,7 @@ class _LoggerScreenState extends State<LoggerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: Text(widget.device.platformName)),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -108,6 +117,11 @@ class _LoggerScreenState extends State<LoggerScreen> {
             if (_connected) ...[
               if (_last != null) _MeasurementCard(m: _last!),
               const SizedBox(height: 16),
+              Text('Puissance (W) sur la session',
+                  style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              _PowerChart(spots: _wattsSpots),
+              const SizedBox(height: 16),
               ElevatedButton(
                 onPressed: _logging ? _stopLogging : _startLogging,
                 child: Text(_logging ? 'Arrêter' : 'Démarrer l\'enregistrement'),
@@ -115,6 +129,47 @@ class _LoggerScreenState extends State<LoggerScreen> {
               if (_csvLogger != null)
                 TextButton(onPressed: _shareCsv, child: const Text('Exporter le CSV')),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PowerChart extends StatelessWidget {
+  const _PowerChart({required this.spots});
+
+  final List<FlSpot> spots;
+
+  @override
+  Widget build(BuildContext context) {
+    if (spots.length < 2) {
+      return const SizedBox(
+        height: 180,
+        child: Center(child: Text('En attente de données...')),
+      );
+    }
+    final maxWatts = spots.map((s) => s.y).reduce((a, b) => a > b ? a : b);
+    return SizedBox(
+      height: 180,
+      child: LineChart(
+        LineChartData(
+          minY: 0,
+          maxY: maxWatts * 1.1 + 1,
+          gridData: const FlGridData(show: true),
+          borderData: FlBorderData(show: false),
+          titlesData: const FlTitlesData(
+            topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          ),
+          lineBarsData: [
+            LineChartBarData(
+              spots: spots,
+              isCurved: false,
+              color: Theme.of(context).colorScheme.primary,
+              barWidth: 2,
+              dotData: const FlDotData(show: false),
+            ),
           ],
         ),
       ),
