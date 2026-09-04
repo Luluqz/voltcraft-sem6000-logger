@@ -1,118 +1,116 @@
-# Power Logger for SEM6000 — version mobile (Flutter)
+# Power Logger for SEM6000 — mobile version (Flutter)
 
-Application mobile Flutter qui reproduit `sem6000.py` (le script Python à la
-racine du dépôt) : elle se connecte en Bluetooth Low Energy à une prise
-connectée Voltcraft SEM6000, affiche les mesures en direct et permet
-d'enregistrer une session dans un fichier CSV.
+A Flutter mobile app that mirrors `sem6000.py` (the Python script at the
+root of this repo): it connects over Bluetooth Low Energy to a Voltcraft
+SEM6000 smart plug, shows live measurements, and can record a session to a
+CSV file.
 
-Testée et fonctionnelle sur Android (OnePlus 6, Android 11) contre une prise
-SEM6000 physique — voir `SETUP_LOG.md` pour le détail de la mise en place et
-des bugs corrigés. iOS n'a pas été testé sur appareil réel.
+Tested and working on Android (OnePlus 6, Android 11) against a physical
+SEM6000 plug — see `SETUP_LOG.md` for the full setup log and the bugs found
+and fixed along the way. iOS has not been tested on a real device.
 
-## Fonctionnalités
+## Features
 
-- Scan BLE et détection des appareils SEM6000/Voltcraft à proximité
-- Connexion et authentification par PIN (4 chiffres)
-- Mesures en direct (puissance, tension, courant, fréquence, état
-  marche/arrêt), rafraîchies chaque seconde dès la connexion
-- Graphique de puissance (W) sur toute la durée de la session
-- Enregistrement optionnel dans un fichier CSV, à démarrer/arrêter à la
-  demande indépendamment de l'affichage live
-- Export/partage du CSV (email, messagerie, Drive, etc.)
-- Historique des enregistrements précédents : liste, partage, suppression
-- Bandeau et dialogue "À propos" rappelant qu'il s'agit d'une app non
-  officielle
+- BLE scan with detection of nearby SEM6000/Voltcraft devices
+- Connect and authenticate with the 4-digit PIN
+- Live measurements (power, voltage, current, frequency, on/off state),
+  refreshed every second as soon as the connection is established
+- Power (W) chart over the whole session
+- Optional CSV recording, started/stopped on demand independently of the
+  live display
+- Export/share the CSV (email, messaging apps, Drive, etc.)
+- History of past recordings: list, share, delete
+- A banner and an "About" dialog reminding users this is an unofficial app
 
-## Prérequis
+## Requirements
 
 - Flutter SDK (stable)
-- Android SDK (platform 34+, build-tools) pour la cible Android
-- Un appareil Android avec Bluetooth activé (le BLE ne fonctionne pas dans
-  un émulateur — utile uniquement pour visualiser l'UI)
-- Une prise Voltcraft SEM6000
+- Android SDK (platform 34+, build-tools) for the Android target
+- An Android device with Bluetooth enabled (BLE doesn't work in an
+  emulator — useful only to preview the UI)
+- A Voltcraft SEM6000 smart plug
 
-## Lancer l'app
+## Running the app
 
 ```bash
 cd mobile
 flutter pub get
-flutter devices        # repérer l'ID de l'appareil connecté en USB
+flutter devices        # find the ID of the USB-connected device
 flutter run -d <device_id>
 ```
 
-Build d'un APK debug :
+Building a debug APK:
 
 ```bash
 flutter build apk --debug
 ```
 
-## Structure du code
+## Code layout
 
-- `lib/protocol.dart` — port direct du protocole SEM6000 (checksum, frames,
-  parsing) depuis `sem6000.py`
-- `lib/ble/sem6000_ble.dart` — connexion, authentification PIN, lecture
-  périodique via `flutter_blue_plus`
-- `lib/csv_logger.dart` — création, listing et suppression des fichiers CSV
-  (stockage privé de l'app)
-- `lib/screens/scan_screen.dart` — scan et sélection de l'appareil
-- `lib/screens/logger_screen.dart` — connexion, mesures live, graphique,
-  démarrage/arrêt de l'enregistrement, export
-- `lib/screens/history_screen.dart` — liste des enregistrements CSV passés
+- `lib/protocol.dart` — direct port of the SEM6000 protocol (checksum,
+  frames, parsing) from `sem6000.py`
+- `lib/ble/sem6000_ble.dart` — connection, PIN authentication, periodic
+  reads via `flutter_blue_plus`
+- `lib/csv_logger.dart` — creating, listing and deleting CSV files (in the
+  app's private storage)
+- `lib/screens/scan_screen.dart` — scanning and picking a device
+- `lib/screens/logger_screen.dart` — connection, live measurements, chart,
+  start/stop recording, export
+- `lib/screens/history_screen.dart` — list of past CSV recordings
 
-## Permissions Android
+## Android permissions
 
-Déjà déclarées dans `android/app/src/main/AndroidManifest.xml` :
-`BLUETOOTH`/`BLUETOOTH_ADMIN`/`ACCESS_FINE_LOCATION` (Android ≤ 11) et
-`BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` (Android 12+), plus la déclaration de la
-fonctionnalité `bluetooth_le`. Rien à ajouter manuellement.
+Already declared in `android/app/src/main/AndroidManifest.xml`:
+`BLUETOOTH`/`BLUETOOTH_ADMIN`/`ACCESS_FINE_LOCATION` (Android ≤ 11) and
+`BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` (Android 12+), plus the
+`bluetooth_le` feature declaration. Nothing to add manually.
 
 ## iOS
 
-Projet natif `ios/` généré mais non testé sur appareil réel. Avant de
-pouvoir scanner en Bluetooth sur iOS, ajouter dans `ios/Runner/Info.plist` :
+The native `ios/` project has been generated but not tested on a real
+device. Before Bluetooth scanning can work on iOS, add this to
+`ios/Runner/Info.plist`:
 
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
-<string>Cette app utilise le Bluetooth pour lire les mesures de la prise SEM6000.</string>
+<string>This app uses Bluetooth to read measurements from the SEM6000 plug.</string>
 ```
 
-## Où sont stockés les CSV ?
+## Where are the CSV files stored?
 
-Dans le stockage privé de l'app (non visible depuis un gestionnaire de
-fichiers classique, ni depuis un PC connecté en USB sans root/débogage).
-Utiliser le bouton "Exporter" (écran de mesure ou historique) pour partager
-un fichier ou l'enregistrer ailleurs (Drive, Fichiers, email...).
+In the app's private storage (not visible from a regular file manager, nor
+from a PC connected over USB without root/debugging access). Use the
+"Export" button (measurement screen or history) to share a file or save it
+elsewhere (Drive, Files, email...).
 
-## Mentions légales / disclaimer
+## Legal notice / disclaimer
 
-Application non officielle, indépendante, non affiliée à Voltcraft ni à
-Conrad Electronic. "Voltcraft" et "SEM6000" sont des marques de leurs
-propriétaires respectifs, mentionnées uniquement à titre descriptif pour
-indiquer la compatibilité de l'application. Le disclaimer est affiché dans
-l'app (bandeau sur l'écran de scan + dialogue "À propos", icône ⓘ dans la
-barre d'app).
+This is an independent, unofficial app, not affiliated with Voltcraft or
+Conrad Electronic. "Voltcraft" and "SEM6000" are trademarks of their
+respective owners, mentioned only to describe the app's compatibility with
+that device. The disclaimer is shown in the app (a banner on the scan
+screen plus an "About" dialog, ⓘ icon in the app bar).
 
-Suggestion de description pour la fiche App Store / Play Store :
+Suggested App Store / Play Store listing description:
 
-> Enregistreur de consommation électrique compatible avec la prise
-> connectée Voltcraft SEM6000 (Bluetooth LE). Application indépendante,
-> non affiliée à Voltcraft/Conrad Electronic.
+> Power consumption logger compatible with the Voltcraft SEM6000 smart
+> plug (Bluetooth LE). Independent app, not affiliated with
+> Voltcraft/Conrad Electronic.
 
-## Limites connues
+## Known limitations
 
-- Pas de reconnexion automatique si le lien BLE tombe pendant une session.
-- iOS non testé sur appareil réel.
-- Testée avec une seule prise SEM6000 physique ; d'autres versions
-  matérielles du SEM6000 peuvent renvoyer un format de trame légèrement
-  différent (voir le commentaire dans `parseMeasurement`, `protocol.dart`).
-- Pas de vue "toutes les mesures détaillées" au-delà du graphique de
-  puissance (tension/courant/fréquence ne sont affichés qu'en instantané,
-  pas graphés dans le temps).
+- No automatic reconnection if the BLE link drops during a session.
+- iOS not tested on a real device.
+- Tested with a single physical SEM6000 plug; other SEM6000 hardware
+  revisions may return a slightly different frame format (see the comment
+  in `parseMeasurement`, `protocol.dart`).
+- No detailed time-series view beyond the power chart (voltage/current/
+  frequency are only shown as instant readings, not plotted over time).
 
-## Protocole
+## Protocol
 
-Basé sur la documentation communautaire reverse-engineered :
+Based on community reverse-engineered documentation:
 [Heckie75/voltcraft-sem-6000](https://github.com/Heckie75/voltcraft-sem-6000/blob/master/API.md)
 
-Journal détaillé de la mise en place de l'environnement et des bugs
-rencontrés/corrigés lors des tests sur appareil réel : voir `SETUP_LOG.md`.
+For a detailed log of the environment setup and the bugs found and fixed
+during real-device testing, see `SETUP_LOG.md`.
