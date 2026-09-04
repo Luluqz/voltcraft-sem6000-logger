@@ -1,51 +1,87 @@
-# sem6000_app — version mobile (Flutter)
+# Power Logger for SEM6000 — version mobile (Flutter)
 
-Portage du script `sem6000.py` en application mobile Android/iOS. Même
-protocole BLE (checksum, frames, parsing — voir `lib/protocol.dart`), mais
-connexion, scan et logging pilotés depuis l'app au lieu de la ligne de
-commande.
+Application mobile Flutter qui reproduit `sem6000.py` (le script Python à la
+racine du dépôt) : elle se connecte en Bluetooth Low Energy à une prise
+connectée Voltcraft SEM6000, affiche les mesures en direct et permet
+d'enregistrer une session dans un fichier CSV.
 
-## Ce qui est fait
+Testée et fonctionnelle sur Android (OnePlus 6, Android 11) contre une prise
+SEM6000 physique — voir `SETUP_LOG.md` pour le détail de la mise en place et
+des bugs corrigés. iOS n'a pas été testé sur appareil réel.
 
-- `lib/protocol.dart` — port direct des fonctions Python (`checksum`,
-  `build_frame`, `build_auth_frame`, `build_measure_frame`, `parse_measurement`).
-- `lib/ble/sem6000_ble.dart` — connexion BLE, authentification PIN, lecture
-  périodique (via `flutter_blue_plus`).
-- `lib/csv_logger.dart` — écriture CSV dans le dossier documents de l'app.
-- `lib/screens/scan_screen.dart` — scan et sélection de l'appareil.
-- `lib/screens/logger_screen.dart` — saisie du PIN, connexion, affichage
-  live des mesures, start/stop logging, export/partage du CSV.
+## Fonctionnalités
 
-## Ce qui manque (Flutter SDK non installé dans cet environnement)
+- Scan BLE et détection des appareils SEM6000/Voltcraft à proximité
+- Connexion et authentification par PIN (4 chiffres)
+- Mesures en direct (puissance, tension, courant, fréquence, état
+  marche/arrêt), rafraîchies chaque seconde dès la connexion
+- Graphique de puissance (W) sur toute la durée de la session
+- Enregistrement optionnel dans un fichier CSV, à démarrer/arrêter à la
+  demande indépendamment de l'affichage live
+- Export/partage du CSV (email, messagerie, Drive, etc.)
+- Historique des enregistrements précédents : liste, partage, suppression
+- Bandeau et dialogue "À propos" rappelant qu'il s'agit d'une app non
+  officielle
 
-Le dossier ne contient que le code Dart : il manque les projets natifs
-`android/` et `ios/` que `flutter create` génère normalement. À faire une
-fois Flutter installé sur votre machine :
+## Prérequis
+
+- Flutter SDK (stable)
+- Android SDK (platform 34+, build-tools) pour la cible Android
+- Un appareil Android avec Bluetooth activé (le BLE ne fonctionne pas dans
+  un émulateur — utile uniquement pour visualiser l'UI)
+- Une prise Voltcraft SEM6000
+
+## Lancer l'app
 
 ```bash
 cd mobile
-flutter create --org com.sem6000 .   # ajoute android/, ios/, etc. sans écraser lib/ ni pubspec.yaml existants
 flutter pub get
-flutter run                          # avec un appareil/émulateur connecté
+flutter devices        # repérer l'ID de l'appareil connecté en USB
+flutter run -d <device_id>
 ```
 
-## Permissions à vérifier après `flutter create`
+Build d'un APK debug :
 
-**Android** (`android/app/src/main/AndroidManifest.xml`) — ajouter avant
-`<application>` :
-
-```xml
-<uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
-<uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+```bash
+flutter build apk --debug
 ```
 
-**iOS** (`ios/Runner/Info.plist`) — ajouter :
+## Structure du code
+
+- `lib/protocol.dart` — port direct du protocole SEM6000 (checksum, frames,
+  parsing) depuis `sem6000.py`
+- `lib/ble/sem6000_ble.dart` — connexion, authentification PIN, lecture
+  périodique via `flutter_blue_plus`
+- `lib/csv_logger.dart` — création, listing et suppression des fichiers CSV
+  (stockage privé de l'app)
+- `lib/screens/scan_screen.dart` — scan et sélection de l'appareil
+- `lib/screens/logger_screen.dart` — connexion, mesures live, graphique,
+  démarrage/arrêt de l'enregistrement, export
+- `lib/screens/history_screen.dart` — liste des enregistrements CSV passés
+
+## Permissions Android
+
+Déjà déclarées dans `android/app/src/main/AndroidManifest.xml` :
+`BLUETOOTH`/`BLUETOOTH_ADMIN`/`ACCESS_FINE_LOCATION` (Android ≤ 11) et
+`BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT` (Android 12+), plus la déclaration de la
+fonctionnalité `bluetooth_le`. Rien à ajouter manuellement.
+
+## iOS
+
+Projet natif `ios/` généré mais non testé sur appareil réel. Avant de
+pouvoir scanner en Bluetooth sur iOS, ajouter dans `ios/Runner/Info.plist` :
 
 ```xml
 <key>NSBluetoothAlwaysUsageDescription</key>
 <string>Cette app utilise le Bluetooth pour lire les mesures de la prise SEM6000.</string>
 ```
+
+## Où sont stockés les CSV ?
+
+Dans le stockage privé de l'app (non visible depuis un gestionnaire de
+fichiers classique, ni depuis un PC connecté en USB sans root/débogage).
+Utiliser le bouton "Exporter" (écran de mesure ou historique) pour partager
+un fichier ou l'enregistrer ailleurs (Drive, Fichiers, email...).
 
 ## Mentions légales / disclaimer
 
@@ -64,7 +100,19 @@ Suggestion de description pour la fiche App Store / Play Store :
 
 ## Limites connues
 
-- Pas de reconnexion automatique si le lien BLE tombe pendant le logging.
-- Pas de persistance de l'historique en base (juste le fichier CSV courant).
-- Sur iOS, le scan/logging en arrière-plan prolongé est plus contraint
-  qu'Android — à tester en conditions réelles avant usage longue durée.
+- Pas de reconnexion automatique si le lien BLE tombe pendant une session.
+- iOS non testé sur appareil réel.
+- Testée avec une seule prise SEM6000 physique ; d'autres versions
+  matérielles du SEM6000 peuvent renvoyer un format de trame légèrement
+  différent (voir le commentaire dans `parseMeasurement`, `protocol.dart`).
+- Pas de vue "toutes les mesures détaillées" au-delà du graphique de
+  puissance (tension/courant/fréquence ne sont affichés qu'en instantané,
+  pas graphés dans le temps).
+
+## Protocole
+
+Basé sur la documentation communautaire reverse-engineered :
+[Heckie75/voltcraft-sem-6000](https://github.com/Heckie75/voltcraft-sem-6000/blob/master/API.md)
+
+Journal détaillé de la mise en place de l'environnement et des bugs
+rencontrés/corrigés lors des tests sur appareil réel : voir `SETUP_LOG.md`.
