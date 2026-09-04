@@ -20,13 +20,14 @@ class Sem6000Ble {
     final services = await device.discoverServices();
     for (final service in services) {
       for (final char in service.characteristics) {
-        final uuid = char.uuid.toString().toLowerCase();
+        final uuid = char.uuid.str128.toLowerCase();
         if (uuid == uuidWrite) _writeChar = char;
         if (uuid == uuidNotify) _notifyChar = char;
       }
     }
 
     if (_writeChar == null || _notifyChar == null) {
+      await device.disconnect();
       throw StateError(
           "SEM6000 characteristics not found (device may not be a SEM6000, or PIN screen not paired).");
     }

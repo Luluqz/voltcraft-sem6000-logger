@@ -220,18 +220,121 @@ Mis à jour au fur et à mesure.
    → remplacé par un test de fumée qui vérifie que l'écran de scan
    affiche bien le bandeau disclaimer.
 
-## Étapes suivantes prévues
+(Section "Étapes suivantes prévues" retirée le 2026-09-04 : toutes les
+étapes qu'elle listait — configuration ANDROID_HOME, installation SDK,
+PATH, `flutter doctor`, `flutter create`, `flutter build apk` — avaient
+déjà été réalisées et documentées ci-dessus aux points 6 à 17.)
 
-6. Configurer `ANDROID_HOME` / `ANDROID_SDK_ROOT` vers
-   `C:\Users\dumon\dev\android-sdk`.
-7. Utiliser `sdkmanager` pour installer `platform-tools`,
-   `platforms;android-34`, `build-tools;34.0.0`, et accepter les licences
-   (`sdkmanager --licenses`).
-8. Ajouter `flutter\bin` et `platform-tools` au PATH de la session.
-9. `flutter doctor` pour vérifier la configuration.
-10. `flutter create --org com.sem6000 .` dans `mobile/` pour générer les
-    dossiers natifs `android/` et `ios/` (sans écraser le code Dart déjà
-    écrit, `flutter create` ne remplace pas les fichiers existants).
-11. `flutter pub get` puis `flutter build apk` (ou au minimum
-    `flutter analyze`) pour valider que le code Dart compile réellement,
-    but étant de vérifier le portage plutôt que juste l'écrire à l'aveugle.
+## 2026-09-04 — Test sur appareil Android réel
+
+1. **Réactivation de l'environnement de la session** (`ANDROID_HOME`,
+   `ANDROID_SDK_ROOT`, ajout de `flutter\bin` et `platform-tools` au
+   `PATH`) via variables d'environnement Bash, puis `flutter --version`
+   pour confirmer.
+   Pourquoi : ces variables ne persistent pas entre les sessions du
+   terminal ; nécessaire pour pouvoir relancer `adb`/`flutter` après
+   avoir rouvert une nouvelle session de travail.
+
+2. **`adb devices -l`** : aucun appareil listé au premier essai, puis
+   après demande à l'utilisateur de brancher son téléphone en USB et
+   d'activer le débogage USB.
+   Pourquoi : première étape de diagnostic avant de lancer
+   `flutter run` sur un vrai appareil (test BLE réel, impossible en
+   émulateur — voir points 18 et 21).
+
+3. **`adb kill-server` / `adb start-server`** puis nouveau
+   `adb devices -l` : toujours aucun appareil détecté côté ADB.
+   Pourquoi : élimine l'hypothèse d'un démon adb bloqué avant de
+   creuser côté pilote USB Windows.
+
+4. **Diagnostic côté Windows** via `Get-PnpDevice` (PowerShell) :
+   trouvé un périphérique nommé "Mobile" (`VID_12D1` — Huawei),
+   `Status = Unknown`, `Problem = CM_PROB_PHANTOM`.
+   Pourquoi : si `adb` ne voit rien, vérifier si le problème est côté
+   ADB (autorisation refusée/pilote) ou côté connexion physique
+   (câble, port). `CM_PROB_PHANTOM` indique que Windows garde le
+   souvenir d'une connexion USB passée mais que l'appareil n'est pas
+   actuellement branché/reconnu — donc le problème est en amont d'ADB.
+   → Utilisateur invité à vérifier le câble (data, pas charge seule),
+   le déverrouillage de l'écran (nécessaire pour voir le popup
+   d'autorisation de débogage USB), et le mode de connexion USB choisi
+   sur le téléphone (Transfert de fichiers/MTP plutôt que Charge
+   seule).
+
+5. **Résolu** : après vérification côté utilisateur (câble/écran/mode
+   USB), `adb devices -l` détecte l'appareil : `b971b523` — OnePlus 6
+   (`ONEPLUS_A6003`), état `device` (autorisé). Passage à
+   `flutter run` sur cet appareil pour un test réel avec BLE matériel.
+
+6. **Bug réel #1 trouvé et corrigé : permissions Bluetooth manquantes
+   dans `android/app/src/main/AndroidManifest.xml`**.
+   Symptôme : l'app se lance mais crashe dès le premier scan avec
+   `PlatformException(androidException, java.lang.SecurityException:
+   Need BLUETOOTH permission...)`, malgré des demandes de permission
+   runtime correctes côté Dart (`scan_screen.dart` utilise déjà
+   `permission_handler` pour `bluetoothScan`/`bluetoothConnect`/
+   `locationWhenInUse`).
+   Cause : ces demandes runtime sont sans effet si les permissions ne
+   sont pas déclarées dans le manifest — jamais détecté avant car les
+   tests précédents (émulateur, étape 21) ne validaient que l'UI, pas
+   un vrai scan BLE.
+   Correction : ajout de `BLUETOOTH`/`BLUETOOTH_ADMIN`/
+   `ACCESS_FINE_LOCATION` (maxSdkVersion 30, pour Android ≤11) et
+   `BLUETOOTH_SCAN` (avec `neverForLocation`)/`BLUETOOTH_CONNECT`
+   (Android 12+), plus `<uses-feature android:name=
+   "android.hardware.bluetooth_le" android:required="true">`, suivant
+   la doc officielle du plugin `flutter_blue_plus`.
+   Rebuild complet nécessaire (changement de manifest natif, pas
+   rechargeable à chaud) : `flutter run` relancé après `pkill -f
+   "flutter run"` + `adb shell am force-stop` pour libérer proprement
+   la session précédente.
+   Résultat : le scan fonctionne, l'appareil réel `Voltcraft
+   B3:00:00:00:87:07` est bien détecté.
+
+7. **Bug réel #2 trouvé et corrigé : comparaison d'UUID de
+   caractéristiques toujours fausse dans `lib/ble/sem6000_ble.dart`**.
+   Symptôme : après le scan, la connexion à l'appareil réel échoue
+   systématiquement avec `StateError("SEM6000 characteristics not
+   found (device may not be a SEM6000, or PIN screen not paired)")`,
+   alors que l'appareil est bien un SEM6000 reconnu.
+   Cause trouvée en inspectant le code source du plugin
+   `flutter_blue_plus_platform_interface` (`lib/src/guid.dart`) dans
+   le cache pub : `Guid.toString()` renvoie la forme *courte* d'un
+   UUID standard 16 bits (ex. `"fff3"`), pas la forme 128 bits complète
+   (`"0000fff3-0000-1000-8000-00805f9b34fb"`) utilisée dans
+   `protocol.dart` (`uuidWrite`, `uuidNotify`). La comparaison
+   `char.uuid.toString().toLowerCase() == uuidWrite` échouait donc
+   toujours, silencieusement, quel que soit l'appareil.
+   Correction : `char.uuid.toString()` → `char.uuid.str128` (getter du
+   plugin qui renvoie explicitement la forme 128 bits) dans
+   `sem6000_ble.dart`.
+   Test en cours après ce correctif (hot reload suffisant, changement
+   Dart pur, pas de rebuild natif nécessaire).
+
+8. **Bug réel #3 trouvé et corrigé : connexion GATT non nettoyée en
+   cas d'échec, provoquant `FlutterBluePlusException` code Android 133
+   ("GATT error") au réessai**.
+   Symptôme : après le correctif du point 7, nouvelle tentative de
+   connexion → erreur générique Android 133, un code d'erreur GATT
+   fourre-tout connu pour survenir quand une connexion précédente est
+   restée à moitié ouverte côté pile Bluetooth Android.
+   Cause : dans `sem6000_ble.dart`, `connect()` appelait déjà
+   `device.connect()` (connexion GATT établie) *avant* de vérifier la
+   présence des caractéristiques ; si elles manquaient (cas du bug #2,
+   juste avant le fix), une `StateError` était levée sans jamais
+   appeler `device.disconnect()`. Côté UI, `logger_screen.dart`
+   (`_connect()`) attrapait l'erreur pour l'afficher mais ne
+   déconnectait pas non plus. Résultat : une connexion GATT fantôme
+   restait ouverte sur l'appareil, perturbant les tentatives
+   suivantes.
+   Correction : `sem6000_ble.dart` déconnecte (`await
+   device.disconnect()`) avant de lever la `StateError` si les
+   caractéristiques ne sont pas trouvées ; `logger_screen.dart`
+   déconnecte aussi (`await _ble.disconnect()`) dans le bloc `catch`
+   de `_connect()`, pour ne jamais laisser une connexion à moitié
+   établie après un échec, quelle qu'en soit la cause.
+   Remédiation immédiate en plus du fix : `adb shell am force-stop`
+   sur l'app pour forcer la fermeture du client GATT existant côté
+   process avant de relancer (le simple hot-reload ne suffit pas à
+   nettoyer un état de connexion déjà corrompu côté OS).
+   Test en cours après ce correctif.

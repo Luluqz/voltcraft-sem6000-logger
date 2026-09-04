@@ -51,6 +51,7 @@ class _LoggerScreenState extends State<LoggerScreen> {
         _connected = true;
       });
     } catch (e) {
+      await _ble.disconnect();
       setState(() => _status = 'Erreur: $e');
     }
   }
