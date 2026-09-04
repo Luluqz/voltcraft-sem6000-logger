@@ -337,4 +337,64 @@ déjà été réalisées et documentées ci-dessus aux points 6 à 17.)
    sur l'app pour forcer la fermeture du client GATT existant côté
    process avant de relancer (le simple hot-reload ne suffit pas à
    nettoyer un état de connexion déjà corrompu côté OS).
-   Test en cours après ce correctif.
+
+   → Ces trois correctifs confirmés fonctionnels sur l'appareil réel
+   (scan, connexion, authentification PIN, mesures live). Commit
+   `7ca3aac`.
+
+9. **Test export CSV + partage** : validé de bout en bout sur
+   l'appareil réel (enregistrement → arrêt → export → partage via
+   WhatsApp, instantané). Une confusion initiale sur Gmail (un seul
+   mail visible dans "Envoyés" après deux partages) a été
+   diagnostiquée comme un simple regroupement en fil de discussion
+   Gmail (sujet vide + même destinataire) après vérification, via
+   `adb shell run-as com.sem6000.sem6000_app` (build debug), que
+   6 fichiers CSV distincts avec des données réelles (2 à 26 lignes)
+   existaient bien dans `app_flutter/` — donc pas de bug côté app.
+   Au passage, confirmation que `getApplicationDocumentsDirectory()`
+   pointe vers le stockage interne privé de l'app
+   (`app_flutter/`), invisible sans `adb`/root pour un utilisateur
+   normal.
+
+10. **Nouvelle fonctionnalité : historique des enregistrements CSV**
+    (`lib/screens/history_screen.dart`), à la demande de
+    l'utilisateur suite au test précédent.
+    Pourquoi : les CSV générés à chaque session n'étaient accessibles
+    que via le bouton "Exporter" de la session en cours ; les
+    enregistrements précédents restaient invisibles et non
+    supprimables depuis l'app.
+    - `CsvLogger.listFiles()` (`lib/csv_logger.dart`) : liste les CSV
+      du dossier documents de l'app, triés du plus récent au plus
+      ancien.
+    - `CsvLogger.deleteFile()` : suppression d'un fichier.
+    - Écran `HistoryScreen` : liste avec date/heure, taille, bouton
+      partager (réutilise `share_plus`) et bouton supprimer (avec
+      confirmation).
+    - Accès ajouté dans `scan_screen.dart` (icône historique dans
+      l'AppBar, à côté du bouton "À propos"), car cet écran est
+      atteignable sans connexion active à un appareil.
+    Choix technique : le tri et l'affichage de la date utilisent la
+    date de modification du fichier (`FileStat.modified` via
+    `file.stat()`/`file.lastModified()`), pas un parsing du nom de
+    fichier — pour rester correct indépendamment du format de nom
+    choisi (voir point 11 juste après, qui change justement ce
+    format).
+    Testé et confirmé fonctionnel par l'utilisateur (liste, partage
+    d'un ancien fichier, suppression).
+
+11. **Format du nom de fichier CSV changé en ordre français
+    (jj-mm-aaaa)**, à la demande de l'utilisateur.
+    Avant : `sem6000_<ISO8601 avec ':' remplacés par '-'>.csv`
+    (ex. `sem6000_2026-09-04T10-34-00.338146.csv`), lisible mais en
+    ordre année-mois-jour anglosaxon, visible tel quel par le
+    destinataire lors d'un partage (email, WhatsApp...).
+    Après : `sem6000_jj-mm-aaaa_hh-mm-ss.csv`
+    (ex. `sem6000_04-09-2026_10-34-00.csv`).
+    Point d'attention traité : le tri de `listFiles()` reposait
+    jusqu'ici sur l'ordre lexicographique du nom de fichier
+    (valable seulement parce que le format ISO trie
+    naturellement par date) ; ce n'est plus vrai avec l'ordre
+    jour-mois-année. Corrigé en triant par date de modification du
+    fichier (`file.lastModified()`) plutôt que par nom — cf. point 10,
+    ce choix avait été anticipé.
+    Rebuild + test sur l'appareil réel demandé après ce changement.
