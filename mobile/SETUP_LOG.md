@@ -398,3 +398,20 @@ déjà été réalisées et documentées ci-dessus aux points 6 à 17.)
     fichier (`file.lastModified()`) plutôt que par nom — cf. point 10,
     ce choix avait été anticipé.
     Rebuild + test sur l'appareil réel demandé après ce changement.
+    Confirmé fonctionnel.
+
+12. **Affichage des mesures découplé de l'enregistrement CSV**
+    (`lib/screens/logger_screen.dart`), à la demande de l'utilisateur.
+    Avant : la carte de mesures (W/V/A/Hz) ne s'affichait, et n'était
+    rafraîchie, que si l'utilisateur cliquait sur "Démarrer
+    l'enregistrement" — le polling BLE (`Timer.periodic` 1s) était
+    créé uniquement dans `_startLogging()`.
+    Après : le polling démarre automatiquement dans `_connect()` dès
+    l'authentification réussie (`_startPolling()`), donc la carte
+    s'affiche et se rafraîchit chaque seconde dès la connexion, que
+    l'utilisateur enregistre ou non. `_startLogging()`/`_stopLogging()`
+    ne font plus que créer le fichier CSV et activer/désactiver le
+    flag `_logging`, lu par le callback du timer pour décider d'écrire
+    ou non la ligne dans le CSV (le polling lui-même ne s'arrête
+    jamais tant que l'écran reste connecté).
+    Testé et confirmé fonctionnel sur l'appareil réel.

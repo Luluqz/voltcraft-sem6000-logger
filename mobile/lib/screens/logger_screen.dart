@@ -50,25 +50,31 @@ class _LoggerScreenState extends State<LoggerScreen> {
         _status = 'Connecté';
         _connected = true;
       });
+      _startPolling();
     } catch (e) {
       await _ble.disconnect();
       setState(() => _status = 'Erreur: $e');
     }
   }
 
-  Future<void> _startLogging() async {
-    _csvLogger = await CsvLogger.create();
-    setState(() => _logging = true);
+  void _startPolling() {
+    _pollTimer?.cancel();
     _pollTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
       final m = await _ble.readOnce();
       if (m == null) return;
       setState(() => _last = m);
-      await _csvLogger?.appendRow(m);
+      if (_logging) {
+        await _csvLogger?.appendRow(m);
+      }
     });
   }
 
+  Future<void> _startLogging() async {
+    _csvLogger = await CsvLogger.create();
+    setState(() => _logging = true);
+  }
+
   void _stopLogging() {
-    _pollTimer?.cancel();
     setState(() => _logging = false);
   }
 
