@@ -17,7 +17,9 @@ and fixed along the way. iOS has not been tested on a real device.
   refreshed every second as soon as the connection is established
 - Power (W) chart over the whole session
 - Optional CSV recording, started/stopped on demand independently of the
-  live display
+  live display. While recording, a persistent notification (Android
+  foreground service) keeps the polling/logging alive when another app
+  comes to the foreground, instead of Android freezing it.
 - Export/share the CSV (email, messaging apps, Drive, etc.)
 - History of past recordings: list, share, delete
 - A banner and an "About" dialog reminding users this is an unofficial app

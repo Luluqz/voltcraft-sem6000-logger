@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'screens/scan_screen.dart';
 
 void main() {
+  FlutterForegroundTask.initCommunicationPort();
   runApp(const Sem6000App());
 }
 

@@ -3,11 +3,17 @@ import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../ble/sem6000_ble.dart';
 import '../csv_logger.dart';
 import '../protocol.dart';
+import '../recording_task_handler.dart';
+
+/// Foreground-service id for the recording notification. Arbitrary but
+/// must stay constant across the app.
+const _recordingServiceId = 6000;
 
 class LoggerScreen extends StatefulWidget {
   const LoggerScreen({super.key, required this.device});
@@ -34,13 +40,36 @@ class _LoggerScreenState extends State<LoggerScreen> {
   void initState() {
     super.initState();
     _ble = Sem6000Ble(widget.device);
+    _initForegroundTask();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
     _ble.disconnect();
+    if (_logging) {
+      FlutterForegroundTask.stopService();
+    }
     super.dispose();
+  }
+
+  void _initForegroundTask() {
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'sem6000_recording',
+        channelName: 'Enregistrement SEM6000',
+        channelDescription:
+            'Notification affichée pendant l\'enregistrement CSV, pour '
+            'empêcher Android de le stopper quand une autre app est au '
+            'premier plan.',
+        onlyAlertOnce: true,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.nothing(),
+        allowWakeLock: true,
+      ),
+    );
   }
 
   Future<void> _connect() async {
@@ -79,11 +108,31 @@ class _LoggerScreenState extends State<LoggerScreen> {
   }
 
   Future<void> _startLogging() async {
+    final notificationPermission =
+        await FlutterForegroundTask.checkNotificationPermission();
+    if (notificationPermission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
+    final result = await FlutterForegroundTask.startService(
+      serviceId: _recordingServiceId,
+      serviceTypes: const [ForegroundServiceTypes.connectedDevice],
+      notificationTitle: 'Enregistrement SEM6000 en cours',
+      notificationText: 'Mesures écrites dans le CSV même en arrière-plan.',
+      callback: recordingTaskCallback,
+    );
+    if (result is ServiceRequestFailure) {
+      setState(() => _status = 'Erreur: impossible de démarrer '
+          'l\'enregistrement en arrière-plan (${result.error})');
+      return;
+    }
+
     _csvLogger = await CsvLogger.create();
     setState(() => _logging = true);
   }
 
   void _stopLogging() {
+    FlutterForegroundTask.stopService();
     setState(() => _logging = false);
   }
 
