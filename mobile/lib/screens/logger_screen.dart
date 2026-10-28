@@ -10,6 +10,7 @@ import '../ble/sem6000_ble.dart';
 import '../csv_logger.dart';
 import '../protocol.dart';
 import '../recording_task_handler.dart';
+import '../widgets/rename_dialog.dart';
 
 /// Foreground-service id for the recording notification. Arbitrary but
 /// must stay constant across the app.
@@ -33,6 +34,7 @@ class _LoggerScreenState extends State<LoggerScreen> {
   String _status = 'Déconnecté';
   bool _connected = false;
   bool _logging = false;
+  bool _togglingLogging = false;
   int _secondsElapsed = 0;
   final List<FlSpot> _wattsSpots = [];
 
@@ -108,39 +110,54 @@ class _LoggerScreenState extends State<LoggerScreen> {
   }
 
   Future<void> _startLogging() async {
-    final notificationPermission =
-        await FlutterForegroundTask.checkNotificationPermission();
-    if (notificationPermission != NotificationPermission.granted) {
-      await FlutterForegroundTask.requestNotificationPermission();
-    }
+    if (_togglingLogging) return;
+    setState(() => _togglingLogging = true);
+    try {
+      final notificationPermission =
+          await FlutterForegroundTask.checkNotificationPermission();
+      if (notificationPermission != NotificationPermission.granted) {
+        await FlutterForegroundTask.requestNotificationPermission();
+      }
 
-    final result = await FlutterForegroundTask.startService(
-      serviceId: _recordingServiceId,
-      serviceTypes: const [ForegroundServiceTypes.connectedDevice],
-      notificationTitle: 'Enregistrement SEM6000 en cours',
-      notificationText: 'Mesures écrites dans le CSV même en arrière-plan.',
-      callback: recordingTaskCallback,
-    );
-    if (result is ServiceRequestFailure) {
-      setState(() => _status = 'Erreur: impossible de démarrer '
-          'l\'enregistrement en arrière-plan (${result.error})');
-      return;
-    }
+      final result = await FlutterForegroundTask.startService(
+        serviceId: _recordingServiceId,
+        serviceTypes: const [ForegroundServiceTypes.connectedDevice],
+        notificationTitle: 'Enregistrement SEM6000 en cours',
+        notificationText: 'Mesures écrites dans le CSV même en arrière-plan.',
+        callback: recordingTaskCallback,
+      );
+      // A stray double-tap on the button can race two startService calls;
+      // the second one finding the service already up isn't a real failure.
+      if (result is ServiceRequestFailure &&
+          result.error is! ServiceAlreadyStartedException) {
+        setState(() => _status = 'Erreur: impossible de démarrer '
+            'l\'enregistrement en arrière-plan (${result.error})');
+        return;
+      }
 
-    _csvLogger = await CsvLogger.create();
-    setState(() => _logging = true);
+      _csvLogger = await CsvLogger.create();
+      setState(() => _logging = true);
+    } finally {
+      setState(() => _togglingLogging = false);
+    }
   }
 
   void _stopLogging() {
+    if (_togglingLogging) return;
     FlutterForegroundTask.stopService();
     setState(() => _logging = false);
   }
 
   Future<void> _shareCsv() async {
     final file = _csvLogger?.file;
-    if (file != null) {
-      await Share.shareXFiles([XFile(file.path)]);
-    }
+    if (file == null) return;
+
+    final renamed = await promptRenameBeforeSharing(context, file);
+    if (renamed == null) return;
+    // Repoint the active logger at the renamed file so that, if recording
+    // is still running, the next appended row lands in the right place.
+    _csvLogger = CsvLogger.forFile(renamed);
+    await Share.shareXFiles([XFile(renamed.path)]);
   }
 
   @override
@@ -172,7 +189,9 @@ class _LoggerScreenState extends State<LoggerScreen> {
               _PowerChart(spots: _wattsSpots),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: _logging ? _stopLogging : _startLogging,
+                onPressed: _togglingLogging
+                    ? null
+                    : (_logging ? _stopLogging : _startLogging),
                 child: Text(_logging ? 'Arrêter' : 'Démarrer l\'enregistrement'),
               ),
               if (_csvLogger != null)

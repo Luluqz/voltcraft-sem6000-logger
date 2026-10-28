@@ -10,6 +10,9 @@ class CsvLogger {
 
   final File file;
 
+  /// Wraps an existing CSV file, e.g. after [renameFile] changed its path.
+  factory CsvLogger.forFile(File file) => CsvLogger._(file);
+
   static Future<CsvLogger> create() async {
     final dir = await getApplicationDocumentsDirectory();
     final now = DateTime.now();
@@ -74,5 +77,18 @@ class CsvLogger {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  /// Replaces characters that aren't valid in a file name, so user-entered
+  /// names can't escape the app's documents directory or break on Android.
+  static String sanitizeBaseName(String input) {
+    final stripped = input.trim().replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    return stripped.isEmpty ? 'sem6000' : stripped;
+  }
+
+  /// Renames [file] to [newBaseName].csv, in the same directory.
+  static Future<File> renameFile(File file, String newBaseName) {
+    final target = '${file.parent.path}/$newBaseName.csv';
+    return file.rename(target);
   }
 }

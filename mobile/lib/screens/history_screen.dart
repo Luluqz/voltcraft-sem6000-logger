@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../csv_logger.dart';
+import '../widgets/rename_dialog.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -42,7 +43,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Future<void> _share(File f) async {
-    await Share.shareXFiles([XFile(f.path)]);
+    final renamed = await promptRenameBeforeSharing(context, f);
+    if (renamed == null) return;
+    await Share.shareXFiles([XFile(renamed.path)]);
+    await _load();
   }
 
   Future<void> _confirmDelete(File f, DateTime modified) async {
